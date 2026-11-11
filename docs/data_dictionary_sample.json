@@ -1,0 +1,8 @@
+{
+    "dataset": "listings.csv",
+    "columns": {
+        "id": "Mã định danh duy nhất cho mỗi danh sách",
+        "price": "Giá thuê tính theo một đêm",
+        "room_type": "Phân loại không gian thuê (Entire home/apt, Private room, Shared room)"
+    }
+}

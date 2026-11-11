@@ -1,0 +1,64 @@
+city: "melbourne"
+data_root: "australia/vic/melbourne"
+currency: "AUD"
+seed: 42
+source:
+  base_url: "https://data.insideairbnb.com/australia/vic/melbourne/"
+  tables:
+    - "listings"
+    - "calendar"
+    - "reviews"
+snapshots:
+  - "2025-09-12"
+  - "2025-12-12"
+  - "2026-03-21"
+  - "2026-06-16"
+assignments:
+  enabled: true
+  listings: "data/samples/assigned_listings.csv"
+  reviews: "data/samples/assigned_reviews.csv"
+  areas: "data/samples/melbourne_areas.csv"
+paths:
+  raw: "data/raw"
+  processed: "data/processed"
+  samples: "data/samples"
+  figures: "figures"
+  reports: "reports"
+quota:
+  listings_per_snapshot: 1000
+  calendar_rows_per_snapshot: 365000
+  reviews_per_snapshot: 5000
+  room_type_counts:
+    "Entire home/apt": 875
+    "Private room": 125
+  no_review_counts:
+    "2025-09-12": 50
+    "2025-12-12": 30
+    "2026-03-21": 25
+    "2026-06-16": 25
+  missing_price_by_snapshot:
+    "2025-09-12": 0
+    "2025-12-12": 0
+    "2026-03-21": 0
+    "2026-06-16": 20
+  neighbourhood_listings:
+    min: 120
+    max: 130
+qa:
+  price_column: "price"
+  area_column: "analysis_area"
+  price_min: 10.0
+  price_max: 2000.0
+  minimum_nights_max: 365
+  remove_duplicates: true
+  missing_price_action: "flag_only"
+kpis:
+  spatial:
+    - "median_price_per_area"
+    - "listing_count_per_area"
+    - "entire_home_ratio_per_area"
+    - "multi_listing_host_ratio"
+  temporal:
+    - "occupancy_rate_trend"
+    - "price_change_rate_4_snapshots"
+    - "review_growth_rate"

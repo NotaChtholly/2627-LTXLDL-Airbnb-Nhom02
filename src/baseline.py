@@ -48,6 +48,7 @@ def vader_sentiment(text: str) -> str:
 
 
 def keyword_aspects(text: str, aspects: Iterable[str], overall: str) -> tuple[list[str], list[str]]:
+    pos, neg = set(), set()
     for clause in _CLAUSE_SPLIT.split(text or ""):
         clause = clause.strip()
         if not clause:

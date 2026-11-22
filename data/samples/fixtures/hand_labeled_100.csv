@@ -1,0 +1,11 @@
+﻿review_id,listing_id,comments,sentiment_hand,aspects_positive_hand,aspects_negative_hand,language_hand
+109664678,2398060,Good.,positive,,,en
+15063675,51592,"Phòng bẩn, máy lạnh hỏng, wifi chập chờn. Không nên ở.",negative,,cleanliness|amenities,vi
+1602797,43429,"Sehr sauber, freundlicher Gastgeber, alles hat gut funktioniert.",positive,cleanliness|host,,de
+359755424,13240116,Terrible night: construction noise from 6am and the bathroom was dirty. Not worth it.,negative,,noise|cleanliness,en
+412138932,5000678,位置很好，离市中心很近，房间非常干净，房东也很热情。,positive,location|cleanliness,,zh
+443389914,11656757,"Chủ nhà rất nhiệt tình, giá hợp lý, phòng sạch sẽ. Rất đáng tiền.",positive,host|value,,vi
+56773017,43429,"Sehr sauber, freundlicher Gastgeber, alles hat gut funktioniert.",positive,cleanliness|host,,de
+597585860,3639945,"Great location, close to the tram and the apartment was spotless. Would stay again.",positive,location|cleanliness,,en
+769815502592960194,3639945,"Chủ nhà rất nhiệt tình, giá hợp lý, phòng sạch sẽ. Rất đáng tiền.",positive,host|value,,vi
+99426418,2398060,Good.,positive,,,en

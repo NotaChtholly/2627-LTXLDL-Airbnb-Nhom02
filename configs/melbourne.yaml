@@ -1,30 +1,27 @@
-city: "melbourne"
-data_root: "australia/vic/melbourne"
-currency: "AUD"
-seed: 42
+city: melbourne
+data_code: DSE2049-C04-G02-melbourne
+data_root: australia/vic/melbourne
+currency: AUD
+snapshots: ["2025-09-12", "2025-12-12", "2026-03-21", "2026-06-16"]
+
 source:
-  base_url: "https://data.insideairbnb.com/australia/vic/melbourne/"
-  tables:
-    - "listings"
-    - "calendar"
-    - "reviews"
-snapshots:
-  - "2025-09-12"
-  - "2025-12-12"
-  - "2026-03-21"
-  - "2026-06-16"
-assignments:
-  enabled: true
-  listings: "data/samples/assigned_listings.csv"
-  reviews: "data/samples/assigned_reviews.csv"
-  areas: "data/samples/melbourne_areas.csv"
+  base_url: https://data.insideairbnb.com
+  license: "CC BY 4.0 — Inside Airbnb (https://insideairbnb.com/get-the-data/)"
+
 paths:
-  raw: "data/raw"
-  processed: "data/processed"
-  samples: "data/samples"
-  figures: "figures"
-  reports: "reports"
+  raw: data/raw
+  processed: data/processed
+  samples: data/samples
+  figures: figures
+  reports: reports
+
+assignments:
+  listings: data/samples/assigned_listings.csv
+  reviews: data/samples/assigned_reviews.csv
+  areas: data/samples/analysis_areas.csv
+
 quota:
+  enforce_for: ["2025-09-12", "2025-12-12", "2026-03-21", "2026-06-16"]
   listings_per_snapshot: 1000
   calendar_rows_per_snapshot: 365000
   reviews_per_snapshot: 5000
@@ -36,29 +33,41 @@ quota:
     "2025-12-12": 30
     "2026-03-21": 25
     "2026-06-16": 25
-  missing_price_by_snapshot:
-    "2025-09-12": 0
-    "2025-12-12": 0
-    "2026-03-21": 0
+  missing_price_counts:
     "2026-06-16": 20
-  neighbourhood_listings:
-    min: 120
-    max: 130
+  neighbourhood_listings: {min: 120, max: 130}
+
 qa:
-  price_column: "price"
-  area_column: "analysis_area"
-  price_min: 10.0
-  price_max: 2000.0
-  minimum_nights_max: 365
-  remove_duplicates: true
-  missing_price_action: "flag_only"
-kpis:
-  spatial:
-    - "median_price_per_area"
-    - "listing_count_per_area"
-    - "entire_home_ratio_per_area"
-    - "multi_listing_host_ratio"
-  temporal:
-    - "occupancy_rate_trend"
-    - "price_change_rate_4_snapshots"
-    - "review_growth_rate"
+  price_column: price
+  price_snapshot: last
+  price_min: 10
+  price_max: 5000
+  min_nights_cap: 365
+  accommodates_max: 16
+  known_room_types: ["Entire home/apt", "Private room", "Shared room", "Hotel room"]
+  review_min_chars: 3
+  dedupe_keys_listings: [snapshot, id]
+  dedupe_keys_calendar: [snapshot, listing_id, date]
+  dedupe_keys_reviews: [snapshot, id]
+
+kpi:
+  area_col: analysis_area
+  short_stay_max_nights: 7
+  occupancy_window_days: 90
+  multi_host_threshold: 2
+
+llm:
+  provider: gemini
+  model: gemini-3.5-flash-lite
+  api_key_env: GEMINI_API_KEY
+  batch_size: 20
+  max_retries: 6
+  temperature: 0.0
+  aspects: [location, cleanliness, host, value, amenities, noise, safety]
+  cache: data/processed/llm_cache.jsonl
+  results: data/processed/llm_results.csv
+  prices_usd_per_1m:
+    gemini-3.5-flash-lite:      {input: 0.30, output: 2.50}
+    gemini-2.5-flash-lite: {input: 0.10, output: 0.40}
+
+seed: 42

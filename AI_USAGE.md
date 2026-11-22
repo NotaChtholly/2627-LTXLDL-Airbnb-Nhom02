@@ -5,9 +5,9 @@
 - Nhóm: UET.DSE2049 4 – Nhóm 2
 - Mã dữ liệu: `DSE2049-C04-G02-melbourne`
 - Cách làm việc: Làm việc tại nhà, có sử dụng AI và nhóm tự kiểm tra lại kết quả
-- Ước tính đóng góp chung: **Con người 55% – AI 45%**
+- Ước tính đóng góp chung: **Con người 60% – AI 40%**
 
-Nhóm tự ước lượng tỷ lệ đóng góp chung là 55% từ các thành viên và 45% từ AI. Con số này không thể tính chính xác cho từng dòng mã, vì mỗi phần có mức độ hỗ trợ khác nhau. AI giúp gợi ý cú pháp và tạo bản nháp ban đầu; sau đó các thành viên xem lại, chạy thử và chỉnh cho phù hợp với dữ liệu cũng như yêu cầu của bài.
+Nhóm tự ước lượng tỷ lệ đóng góp chung là 60% từ các thành viên và 40% từ AI. Con số này không thể tính chính xác cho từng dòng mã, vì mỗi phần có mức độ hỗ trợ khác nhau. AI giúp gợi ý cú pháp và tạo bản nháp ban đầu; sau đó các thành viên xem lại, chạy thử và chỉnh cho phù hợp với dữ liệu cũng như yêu cầu của bài.
 
 ## 1. Nhóm đã dùng AI vào những việc nào
 
@@ -18,7 +18,7 @@ Nhóm tự ước lượng tỷ lệ đóng góp chung là 55% từ các thành 
 - **Nguyễn Tiến Nam – baseline và biểu đồ (`src/baseline.py`, `src/viz.py`):** ChatGPT và Claude gợi ý biểu thức chính quy cho baseline, cách cấu hình Seaborn/Matplotlib và một số đoạn mã vẽ biểu đồ. Thành viên chọn màu, sắp xếp bố cục, đối chiếu nhãn thủ công và xem biểu đồ có truyền tải đúng kết quả không. Ước tính: AI 45%, con người 55%.
 - **Cả 5 thành viên – gán nhãn và kiểm tra:** Mỗi người tự gán nhãn 20 review trong `hand_labeled_100.csv` để làm bộ đối chiếu. Phần này nhóm thực hiện thủ công, không dùng AI gán nhãn.
 
-Các tỷ lệ theo từng phần chỉ là ước lượng. Khi làm bài, nhóm thấy AI hữu ích nhất lúc cần tìm cú pháp hoặc dựng khung nhanh. Còn việc kiểm tra kết quả có hợp lý với dữ liệu và đề bài không thì nhóm vẫn phải tự làm. Từ đó, nhóm ước tính phần đóng góp chung của các thành viên khoảng 55%, AI khoảng 45%.
+Các tỷ lệ theo từng phần chỉ là ước lượng. Khi làm bài, nhóm thấy AI hữu ích nhất lúc cần tìm cú pháp hoặc dựng khung nhanh. Còn việc kiểm tra kết quả có hợp lý với dữ liệu và đề bài không thì nhóm vẫn phải tự làm. Từ đó, nhóm ước tính phần đóng góp chung của các thành viên khoảng 60%, AI khoảng 40%.
 
 ## 2. Một số prompt đã sử dụng
 

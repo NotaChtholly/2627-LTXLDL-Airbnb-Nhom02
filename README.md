@@ -1,94 +1,114 @@
-# Inside Airbnb: Phân tích thị trường Melbourne
--Dự án bài tập lớn môn Lập trình xử lý dữ liệu (UET.DSE2049) học kỳ 1 năm học 2026–2027 của **Nhóm 02**.
--Mục tiêu của dự án là xây dựng quy trình có thể tái chạy để thu thập và phân tích dữ liệu Airbnb tại Melbourne, theo các khu vực và mốc thời gian. Thành phố, tiền tệ và các mốc snapshot được khai báo trong [`configs/melbourne.yaml`](configs/melbourne.yaml).
-## Dữ liệu
--Dữ liệu được lấy từ [Inside Airbnb](https://insideairbnb.com/) theo giấy phép CC BY 4.0. Repo sử dụng bốn snapshot của Melbourne:
-      | Snapshot | Ngày |
+# 2627-LTXLDL-Airbnb-Melbourne
 
-      | 1 | 2025-09-12 |
-      | 2 | 2025-12-12 |
-      | 3 | 2026-03-21 |
-      | 4 | 2026-06-16 |
--Mỗi snapshot gồm `listings.csv.gz`, `calendar.csv.gz` và `reviews.csv.gz`. Quy trình sử dụng các tệp phân công trong `data/samples/` để lọc listing/review cần phân tích; `analysis_area` được gắn từ bảng phân công listing.
--Dữ liệu gốc được tải vào `data/raw/` và đã được loại khỏi Git bằng `.gitignore`. Vì vậy, lần chạy đầu tiên cần kết nối mạng để tải dữ liệu. Không commit dữ liệu thô lên repository. Khi sử dụng dữ liệu trong báo cáo, ghi rõ nguồn và ngày snapshot tương ứng.
-## Yêu cầu môi trường
-- Python 3.12.9 (theo `.python-version`)
-- Git
-- Kết nối Internet khi cần tải snapshot lần đầu
-Các thư viện Python đã được ghim phiên bản trong [`requirements.txt`](requirements.txt).
-## Cài đặt
+Bài tập lớn **Inside Airbnb** — môn Lập trình xử lý dữ liệu (UET.DSE2049), HK1 2026-2027.
+Lớp UET.DSE2049 4 · Nhóm 2 · mã dữ liệu `DSE2049-C04-G02-melbourne` · **Melbourne, Australia (AUD)**.
+Bên đặt hàng: **Chính quyền thành phố Melbourne** (cơ cấu cho thuê ngắn hạn theo vùng, xu hướng 4 quý, trải nghiệm khách).
+
+Nguồn dữ liệu: [Inside Airbnb](https://insideairbnb.com/get-the-data/), giấy phép CC BY 4.0.
+Bốn mốc chụp: `2025-09-12`, `2025-12-12`, `2026-03-21`, `2026-06-16`.
+
+## 1. Cài đặt (máy sạch)
+
+Python đúng phiên bản trong `.python-version` (đã chạy thử với **3.13.18**; 3.11–3.13 đều chạy được).
+
 ```bash
-git clone https://github.com/NotaChtholly/2627-LTXLDL-Airbnb-Nhom02.git
-cd 2627-LTXLDL-Airbnb-Nhom02
-```
-Tạo môi trường ảo và cài thư viện:
-**Windows PowerShell**
-```powershell
+git clone <repo> && cd 2627-LTXLDL-Airbnb-Melbourne
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-**macOS / Linux**
-```bash
-python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+pip install -r requirements.txt
 ```
-## Chạy quy trình
--Từ thư mục gốc của repository, chạy toàn bộ các bước hiện có:
+
+Khoá API cho bước LLM — đọc từ biến môi trường **`GEMINI_API_KEY`** (tên đặt tại `llm.api_key_env` trong configs):
+
+```bash
+export GEMINI_API_KEY=...
+```
+
+## 2. Chạy toàn bộ quy trình bằng một lệnh
+
 ```bash
 python run_pipeline.py --config configs/melbourne.yaml
 ```
--Lệnh trên tải các snapshot còn thiếu hoặc không hợp lệ, lọc dữ liệu theo các ID được phân công, kiểm tra quota và schema listing, sau đó tạo mẫu review LLM và tệp review để gán nhãn tay.
--Nếu các tệp dữ liệu gốc đã có trong `data/raw/`, có thể bỏ qua tải xuống:
+
+Lệnh này lần lượt: **tải** 12 tệp thô → **lọc** đúng 1.000 listing / 365.000 dòng calendar / 5.000 review mỗi mốc theo
+danh sách ID được giao và **tự kiểm quota** → **QA** → trích **mẫu LLM** (1.000) và tệp **nhãn tay** (100) → **baseline**
+→ gọi **Gemini** (có cache) → **đánh giá** trên nhãn tay → **ước tính chi phí** → **KPI** → **hình** → bản nháp báo cáo.
+
+Tuỳ chọn:
+
+| Cờ | Tác dụng |
+|---|---|
+| `--skip-llm` | không gọi API; dùng `data/processed/llm_cache.jsonl` sẵn có (đã commit) |
+| `--skip-download` | không tải, dùng tệp đã có trong `data/raw/` |
+| `--overwrite-hand-labels` | ghi lại `data/samples/hand_labeled_100.csv` — **mất nhãn đã điền**, chỉ dùng khi cần |
+| `-v` | log chi tiết |
+
+Đổi mốc/thành phố: chỉ sửa `configs/<city>.yaml` (mục `snapshots`, `data_root`, `quota`…), không sửa mã.
+Tệp cấu hình mẫu cho thành phố khác: sao chép `configs/melbourne.yaml`, thay 4 mốc, tiền tệ, `data_root`, và hai tệp
+phân công trong `data/samples/`.
+
+### Smoke test không cần mạng / không cần khoá (≈ 5 giây)
+
 ```bash
-python run_pipeline.py --config configs/melbourne.yaml --skip-download
+python tests/make_fixtures.py --small              
+python run_pipeline.py --config configs/_smoke_fixtures.yaml
 ```
--Có thể bỏ qua kiểm tra quota khi cần chạy riêng các bước còn lại:
-```bash
-python run_pipeline.py --config configs/melbourne.yaml --skip-validation
+
+Đầu ra của smoke test nằm trong `data/samples/fixtures/_out/` (gitignore). Bước LLM ở đây dùng `provider: mock`
+(gán nhãn bằng baseline) — **không phải LLM thật**, chỉ để kiểm tra luồng chạy.
+
+## 3. Tệp kết quả để đối chiếu
+
+| Tệp | Nội dung |
+|---|---|
+| `data/processed/filtered_{listings,calendar,reviews}.csv.gz` | đúng phần dữ liệu của nhóm, 4 mốc, chưa QA |
+| `data/processed/clean_listings.csv`, `clean_calendar.csv.gz`, `clean_reviews.csv`, `clean_reviews_unique.csv` | sau QA, có cột `flag_*`, `price_num`, `price_usable` |
+| `reports/qa_report.csv` | mỗi quy tắc QA: tên → điều kiện → lý do → hành động, số dòng và KPI trước/sau |
+| `data/processed/kpi_*.csv` + `kpi_catalog.csv` | 8 KPI (tên → mục tiêu → công thức → đơn vị) |
+| `data/samples/llm_sample_1000.csv` | 1.000 review mẫu LLM (ID do giảng viên giao) |
+| `data/samples/hand_labeled_100.csv` | 100 review nhãn tay (nhóm điền; xem `HUONG_DAN_GAN_NHAN.md`) |
+| `data/processed/llm_results.csv`, `llm_cache.jsonl` | kết quả LLM có cấu trúc (sentiment, language, aspects ±) |
+| `data/processed/baseline_results.csv` | đối chứng không LLM (VADER + từ khoá + langdetect) |
+| `reports/llm_evaluation.{csv,md}`, `llm_errors.csv` | accuracy/F1 của LLM và baseline trên nhãn tay, ma trận nhầm lẫn, lỗi |
+| `reports/llm_cost_estimate.csv` | chi phí nếu chạy hết review của thành phố |
+| `figures/fig_*.png` | 9 hình: không gian (3), thời gian (3), LLM (3) |
+| `reports/data_dictionary.md` | từ điển dữ liệu |
+| `reports/report_draft.md` → `reports/report.pdf` | bản nháp tự sinh có số liệu → báo cáo kỹ thuật ≤ 10 trang |
+
+## 4. Cấu trúc repo
+
 ```
--Hai cờ `--skip-download` và `--skip-validation` có thể dùng đồng thời.
-## Đầu ra hiện tại
-- `data/raw/<ngày-snapshot>/`: dữ liệu Inside Airbnb đã tải; không được commit.
-- `data/samples/llm_sample_1000.csv`: review nằm trong danh sách ID được phân công cho mẫu LLM.
-- `data/samples/hand_labeled_100.csv`: mẫu review và các cột trống để ghi nhãn cảm xúc, khía cạnh và ngôn ngữ. Nếu tệp đã tồn tại, chương trình giữ nguyên để tránh ghi đè nhãn.
-- `reports/qa_report.csv`: khung báo cáo QA có hàng tiêu đề.
-- `docs/data_dictionary_sample.json`: từ điển dữ liệu mẫu được khởi tạo khi chạy pipeline.
-## Cấu trúc repository
-```text
-.
-├── configs/
-│   └── melbourne.yaml          # Thành phố, snapshot, đường dẫn và tham số
-├── data/
-│   ├── raw/                    # Dữ liệu tải xuống; Git bỏ qua thư mục này
-│   ├── processed/              # Dành cho dữ liệu đã xử lý
-│   └── samples/                # ID được phân công và mẫu review
-├── docs/
-│   └── data_dictionary_sample.json
-├── figures/                    # Nơi lưu biểu đồ
-├── reports/                    # Báo cáo và qa_report.csv
-├── src/
-│   ├── download.py             # Tải snapshot, lọc theo ID, kiểm tra quota
-│   ├── kpi.py                  # Kiểm tra schema và khởi tạo tài liệu dữ liệu
-│   ├── llm.py                  # Trích mẫu review và tạo tệp gán nhãn
-│   ├── qa.py                   # Dành cho các quy tắc QA
-│   ├── baseline.py             # Dành cho phương pháp đối chứng
-│   ├── evaluate.py             # Dành cho đánh giá kết quả
-│   └── viz.py                  # Thiết lập giao diện biểu đồ và khung báo cáo
-├── run_pipeline.py             # Điểm chạy pipeline
-├── requirements.txt
-├── .python-version
-├── .env.example
-└── AI_USAGE.md
+configs/melbourne.yaml        # thành phố, 4 mốc, quota, tham số QA/KPI/LLM (không ghi cứng trong mã)
+configs/_smoke_fixtures.yaml  # cấu hình smoke test trên dữ liệu giả
+data/raw/                     # thô — KHÔNG commit (script tải sinh ra)
+data/processed/               # sạch, kpi_*.csv, kết quả LLM (commit, < 50 MB)
+data/samples/                 # assigned_listings.csv, assigned_reviews.csv, analysis_areas.csv,
+                              # llm_sample_1000.csv, hand_labeled_100.csv, fixtures/ (dữ liệu giả)
+src/download.py               # tải + lọc + kiểm quota             (Nguyễn Thế Đức)
+src/qa.py                     # 23 quy tắc QA, qa_report.csv
+src/kpi.py                    # hợp đồng dữ liệu + 8 KPI            (Trần Minh Đăng)
+src/llm.py                    # mẫu LLM, nhãn tay, gọi Gemini, cache, chi phí (Nguyễn Nhật Minh)
+src/baseline.py               # đối chứng không LLM
+src/evaluate.py               # LLM vs baseline trên nhãn tay
+src/viz.py                    # theme + 9 hình                       (Nguyễn Tiến Nam)
+src/report.py                 # bản nháp báo cáo từ số liệu
+tests/make_fixtures.py        # sinh dữ liệu giả để test
+run_pipeline.py               # một lệnh chạy tất cả
+AI_USAGE.md · .python-version · .env.example · requirements.txt
 ```
-## Phạm vi triển khai và các bước tiếp theo
--Ở bản hiên tại, pipeline đã có tải và kiểm tra tệp nguồn, lọc dữ liệu theo phân công, kiểm tra quota và schema, cùng bước chuẩn bị mẫu review. Cấu hình đã khai báo các nhóm KPI không gian và thời gian.
--Các bước theo yêu cầu bài tập cần tiếp tục hoàn thiện: áp dụng quy tắc QA và ghi tác động vào báo cáo, tính và xuất KPI; gọi LLM để phân tích review, xây dựng baseline và đánh giá trên nhãn tay, sinh biểu đồ và báo cáo PDF. `src/llm.py` hiện chỉ chuẩn bị dữ liệu mẫu, chưa gọi Gemini hay dịch vụ LLM khác. Chương trình cũng chưa tải hoặc xử lý tệp ranh giới GeoJSON. Do đó, lệnh chạy hiện tại chưa tạo các tệp KPI, biểu đồ hoặc báo cáo cuối cùng. Các đầu ra đó cần được bổ sung về sau.
-## API key
--`.env.example` nêu tên biến `GEMINI_API_KEY` để dùng khi tích hợp Gemini. Mã nguồn hiện tại chưa đọc biến này và chưa gửi yêu cầu tới API, nên chưa cần API key để chạy pipeline đang có.
-## Tham khảo
-- [Đề bài lớn: Inside Airbnb](https://courses.iaidev.com/programming-for-data-processing/2627-1/projects/project_airbnb.html)
-- [Inside Airbnb](https://insideairbnb.com/)
+
+## 5. Bước LLM
+- Mô hình mặc định `gemini-2.5-flash` (đổi ở `llm.model`), 20 review/lần gọi, JSON theo schema, temperature 0.
+- Mỗi review xử lý xong được ghi ngay vào `data/processed/llm_cache.jsonl`; chạy lại chỉ gọi phần còn thiếu.
+  Để **chạy lại thật từ đầu** với khoá khác: xoá `llm_cache.jsonl` (hoặc đổi `llm.cache` trong configs) rồi chạy không có `--skip-llm`.
+- Gói miễn phí giới hạn số lần gọi/phút: mã tự chờ và thử lại khi gặp 429/5xx (`llm.max_retries`).
+- 1.000 review ≈ 50 lần gọi; thời gian vài phút.
+## 6. Sự cố thường gặp
+
+| Hiện tượng | Xử lý |
+|---|---|
+| `404 — không có bản chụp …` | sai ngày mốc trong configs; đối chiếu sheet «Phân công» |
+| `403` khi tải | Inside Airbnb chặn tạm; thử lại sau vài phút hoặc tải tay tệp vào `data/raw/<mốc>/` rồi chạy `--skip-download` |
+| `Kiểm tra quota thất bại` | đọc danh sách lỗi: thường do tệp phân công sai nhóm, hoặc mốc tải nhầm |
+| `Thiếu khoá API` | `export GEMINI_API_KEY=...` hoặc chạy `--skip-llm` |
+| `429` lặp lại | hạ `llm.batch_size`, tăng `max_retries`, hoặc dùng `gemini-2.5-flash-lite` |

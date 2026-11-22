@@ -1,0 +1,9 @@
+﻿kpi,goal,formula,unit,dimension
+kpi_active_listings,"Đo quy mô cho thuê ngắn hạn còn 'sống' ở từng vùng, theo dõi theo mốc","active = has_availability=='t' và availability_365>0; share = n_active / n_listing (theo snapshot, analysis_area)",listing; %,vùng × thời gian
+kpi_entire_home_share,Ước lượng nhà nguyên căn bị rút khỏi thị trường thuê dài hạn,"n(room_type=='Entire home/apt') / n_listing (theo snapshot, analysis_area)",%,vùng × thời gian
+kpi_multi_host_share,Phát hiện vận hành thương mại (host nhiều nhà) thay vì chia sẻ nhà,"n(calculated_host_listings_count >= 2) / n_listing có host_id (theo snapshot, analysis_area)",%,vùng × thời gian
+kpi_short_stay_share,Tỉ lệ listing thuộc diện lưu trú ngắn hạn (đối tượng thuế/quy định của Victoria),"n(minimum_nights <= 7, loại flag_min_nights_outlier) / n_listing (theo snapshot, analysis_area)",%,vùng × thời gian
+kpi_occupancy_90d,Sức khoẻ cầu du lịch: tỉ lệ ngày đã đặt/đóng trong 90 ngày tới,"n(available=='f', date trong [mốc, mốc+90)) / n_ngày (calendar; theo snapshot, analysis_area)",%,vùng × thời gian
+kpi_review_velocity,Nhịp khách thực tế (review 12 tháng gần nhất) để so với công suất,"mean(number_of_reviews_ltm) (theo snapshot, analysis_area)",review/listing/năm,vùng × thời gian
+kpi_median_price,Mặt bằng giá đêm theo vùng và loại phòng cho đối chiếu với giá thuê dài hạn,"median(price_num) với price_usable (mốc cuối, loại thiếu giá & ngoại lai) theo analysis_area × room_type; kèm p25/p75 và giá/người",AUD/đêm (tiền tệ theo configs.currency),vùng (chỉ mốc cuối)
+kpi_llm_sentiment,Trải nghiệm khách theo vùng từ văn bản review (LLM) và khía cạnh bị chê nhiều nhất,share_positive = n(sentiment=='positive') / n_review_LLM theo analysis_area; kpi_llm_aspects = đếm khía cạnh khen/chê theo vùng,%; lượt nhắc,vùng (dùng LLM)

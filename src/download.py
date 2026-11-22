@@ -1,122 +1,323 @@
 from __future__ import annotations
+
+import argparse
+import gzip
 import logging
+import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
+
 import pandas as pd
 import requests
+import yaml
+
 LOGGER = logging.getLogger(__name__)
 TABLES = ("listings", "calendar", "reviews")
 REQUIRED_COLUMNS = {
-    "listings": {"id", "price", "room_type", "number_of_reviews"},
+    "listings": {"id"},
     "calendar": {"listing_id", "date"},
     "reviews": {"id", "listing_id", "date", "comments"},
 }
+USER_AGENT = "Mozilla/5.0 (compatible; UET-LTXLDL-student-project/1.0; +https://insideairbnb.com)"
+
+
+def load_config(path: str | Path) -> dict[str, Any]:
+    config_path = Path(path).resolve()
+    with config_path.open("r", encoding="utf-8-sig") as file:
+        config = yaml.safe_load(file)
+    if not isinstance(config, dict):
+        raise ValueError("File YAML phải chứa một mapping.")
+    config["_project_root"] = str(config_path.parent.parent)
+    config["snapshots"] = [str(s) for s in config["snapshots"]]
+    return config
+
+
+def _path(config: Mapping[str, Any], value: str | Path) -> Path:
+    path = Path(value)
+    root = Path(config.get("_project_root", Path.cwd()))
+    return path if path.is_absolute() else root / path
+
+
+def _compression(path: Path) -> str | None:
+    with path.open("rb") as file:
+        return "gzip" if file.read(2) == b"\x1f\x8b" else None
+
+
 def _check_csv_file(path: Path, table: str) -> None:
     if not path.is_file() or path.stat().st_size == 0:
         raise ValueError(f"File không tồn tại hoặc rỗng: {path}")
     try:
-        columns = set(pd.read_csv(path, compression="gzip", nrows=0).columns)
-    except Exception:
-        columns = set(pd.read_csv(path, nrows=0).columns)
+        columns = set(pd.read_csv(path, compression=_compression(path), nrows=0).columns)
+    except Exception as exc:
+        raise ValueError(f"File không phải CSV hợp lệ: {path}") from exc
     missing = REQUIRED_COLUMNS[table] - columns
     if missing:
-        raise ValueError(f"{path} thiếu các cột bắt buộc: {sorted(missing)}")
-def _build_snapshot_url(config: dict[str, Any], snapshot: str, table: str) -> str:
+        raise ValueError(f"{path} thiếu cột: {sorted(missing)}")
+
+
+def _gzip_file(path: Path) -> None:
+    compressed = path.with_name(path.name + ".gzip")
+    try:
+        with path.open("rb") as source, gzip.open(compressed, "wb") as target:
+            shutil.copyfileobj(source, target, length=1024 * 1024)
+        compressed.replace(path)
+    finally:
+        if compressed.exists():
+            compressed.unlink()
+
+
+def download_raw_snapshots(
+    config: Mapping[str, Any], session: requests.Session | None = None
+) -> None:
+    raw_root = _path(config, config["paths"]["raw"])
+    raw_root.mkdir(parents=True, exist_ok=True)
+    http = session or requests.Session()
+    http.headers.update({"User-Agent": USER_AGENT})
+    close_session = session is None
     base_url = config["source"]["base_url"].rstrip("/")
     data_root = config["data_root"].strip("/")
-    if base_url.endswith(data_root):
-        return f"{base_url}/{snapshot}/data/{table}.csv.gz"
-    return f"{base_url}/{data_root}/{snapshot}/data/{table}.csv.gz"
-def download_raw_snapshots(config: dict[str, Any]) -> None:
-    raw_dir = Path(config["paths"].get("raw_dir", config["paths"].get("raw", "data/raw")))
-    with requests.Session() as session:
-        for snapshot in map(str, config["snapshots"]):
-            snapshot_dir = raw_dir / snapshot
+
+    try:
+        for snapshot in config["snapshots"]:
+            snapshot = str(snapshot)
+            snapshot_dir = raw_root / snapshot
             snapshot_dir.mkdir(parents=True, exist_ok=True)
             for table in TABLES:
-                dest = snapshot_dir / f"{table}.csv.gz"
-                if dest.exists():
+                destination = snapshot_dir / f"{table}.csv.gz"
+                if destination.exists():
                     try:
-                        _check_csv_file(dest, table)
+                        _check_csv_file(destination, table)
+                    except (OSError, ValueError) as exc:
+                        LOGGER.warning("Tải lại file không hợp lệ %s: %s", destination, exc)
+                    else:
+                        LOGGER.info("Đã có %s, bỏ qua tải", destination)
                         continue
-                    except Exception as exc:
-                        LOGGER.warning("Tải lại file lỗi %s: %s", dest, exc)
-                url = _build_snapshot_url(config, snapshot, table)
-                temp_file = dest.with_suffix(".csv.gz.part")
+
+                temporary = destination.with_name(destination.name + ".part")
+                response = None
                 try:
-                    with session.get(url, stream=True, timeout=(20, 180)) as resp:
-                        resp.raise_for_status()
-                        with temp_file.open("wb") as f:
-                            for chunk in resp.iter_content(chunk_size=1024 * 1024):
-                                if chunk:
-                                    f.write(chunk)
-                    _check_csv_file(temp_file, table)
-                    temp_file.replace(dest)
-                    LOGGER.info("Đã tải thành công: %s", dest)
+                    url = f"{base_url}/{data_root}/{snapshot}/data/{table}.csv.gz"
+                    LOGGER.info("Tải %s", url)
+                    response = http.get(url, stream=True, timeout=(20, 300))
+                    if response.status_code == 404:
+                        raise ValueError(
+                            f"404 — không có bản chụp {snapshot} cho {data_root}. "
+                            "Kiểm tra lại ngày mốc trong configs/<city>.yaml."
+                        )
+                    response.raise_for_status()
+                    with temporary.open("wb") as file:
+                        for chunk in response.iter_content(1024 * 1024):
+                            if chunk:
+                                file.write(chunk)
+                    _check_csv_file(temporary, table)
+                    if _compression(temporary) is None:
+                        _gzip_file(temporary)
+                    _check_csv_file(temporary, table)
+                    temporary.replace(destination)
+                    LOGGER.info("Đã tải %s (%.1f MB)", destination, destination.stat().st_size / 1e6)
                 finally:
-                    if temp_file.exists():
-                        temp_file.unlink()
-def _read_matching_chunks(path: Path, key: str, valid_ids: set[str]) -> pd.DataFrame:
+                    if response is not None:
+                        response.close()
+                    if temporary.exists():
+                        temporary.unlink()
+    finally:
+        if close_session:
+            http.close()
+
+
+def _read_assignments(config: Mapping[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    assigned_listings = pd.read_csv(
+        _path(config, config["assignments"]["listings"]), dtype="string", encoding="utf-8-sig"
+    )
+    assigned_reviews = pd.read_csv(
+        _path(config, config["assignments"]["reviews"]), dtype="string", encoding="utf-8-sig"
+    )
+    if not {"listing_id", "analysis_area"}.issubset(assigned_listings.columns):
+        raise ValueError("assigned_listings.csv cần có cột listing_id và analysis_area.")
+    if not {"review_id", "listing_id", "llm_sample", "hand_label"}.issubset(assigned_reviews.columns):
+        raise ValueError("assigned_reviews.csv cần có cột review_id, listing_id, llm_sample, hand_label.")
+    for frame, cols in ((assigned_listings, ["listing_id", "analysis_area"]),
+                        (assigned_reviews, ["review_id", "listing_id"])):
+        for col in cols:
+            frame[col] = frame[col].str.strip()
+    return assigned_listings, assigned_reviews
+
+
+def _ids(series: pd.Series) -> set[str]:
+    values = series.astype("string").str.strip().dropna()
+    return set(values[values.ne("")])
+
+
+def _read_matching_rows(path: Path, key: str, ids: set[str], usecols: list[str] | None = None) -> pd.DataFrame:
     chunks = []
     for chunk in pd.read_csv(
-        path, dtype={"id": "string", "listing_id": "string"}, low_memory=False, chunksize=100_000
+        path,
+        compression=_compression(path),
+        dtype={"id": "string", "listing_id": "string"},
+        usecols=usecols,
+        low_memory=False,
+        chunksize=100_000,
     ):
-        matched = chunk.loc[chunk[key].str.strip().isin(valid_ids)]
-        if not matched.empty:
-            chunks.append(matched)
-    if not chunks:
-        return pd.read_csv(path, nrows=0)
-    return pd.concat(chunks, ignore_index=True)
-def filter_assigned_data(config: dict[str, Any]) -> dict[str, pd.DataFrame]:
-    raw_dir = Path(config["paths"].get("raw_dir", config["paths"].get("raw", "data/raw")))
-    assign_cfg = config.get("assigned_ids") or config.get("assignments")
-    listings_path = Path(assign_cfg.get("listings_file") or assign_cfg.get("listings"))
-    reviews_path = Path(assign_cfg.get("reviews_file") or assign_cfg.get("reviews"))
-    df_assign_listings = pd.read_csv(listings_path, dtype="string", encoding="utf-8-sig")
-    df_assign_reviews = pd.read_csv(reviews_path, dtype="string", encoding="utf-8-sig")
-    listing_ids = set(df_assign_listings["listing_id"].str.strip().dropna())
-    review_ids = set(df_assign_reviews["review_id"].str.strip().dropna())
-    area_map = df_assign_listings.set_index(df_assign_listings["listing_id"].str.strip())[
-        "analysis_area"
-    ].str.strip()
-    all_tables: dict[str, list[pd.DataFrame]] = {t: [] for t in TABLES}
-    for snapshot in map(str, config["snapshots"]):
-        snap_dir = raw_dir / snapshot
-        df_l = _read_matching_chunks(snap_dir / "listings.csv.gz", "id", listing_ids)
-        df_l["analysis_area"] = df_l["id"].str.strip().map(area_map)
-        df_c = _read_matching_chunks(snap_dir / "calendar.csv.gz", "listing_id", listing_ids)
-        df_r = _read_matching_chunks(snap_dir / "reviews.csv.gz", "id", review_ids)
-        for name, df in zip(TABLES, (df_l, df_c, df_r)):
-            df.insert(0, "snapshot", snapshot)
-            all_tables[name].append(df)
-    return {table: pd.concat(frames, ignore_index=True) for table, frames in all_tables.items()}
-def validate_quotas(data_dict: dict[str, pd.DataFrame], config: dict[str, Any]) -> bool:
+        if key not in chunk.columns:
+            raise ValueError(f"{path} thiếu cột {key}.")
+        matches = chunk.loc[chunk[key].astype("string").str.strip().isin(ids)]
+        if not matches.empty:
+            chunks.append(matches)
+    return (
+        pd.concat(chunks, ignore_index=True)
+        if chunks
+        else pd.read_csv(path, compression=_compression(path), nrows=0)
+    )
+
+
+def filter_assigned_data(config: Mapping[str, Any]) -> dict[str, dict[str, pd.DataFrame]]:
+    raw_root = _path(config, config["paths"]["raw"])
+    assigned_listings, assigned_reviews = _read_assignments(config)
+    listing_ids = _ids(assigned_listings["listing_id"])
+    review_ids = _ids(assigned_reviews["review_id"])
+    area_by_listing = assigned_listings.set_index("listing_id")["analysis_area"]
+    flags = assigned_reviews.set_index("review_id")[["llm_sample", "hand_label"]].astype(int)
+    filtered: dict[str, dict[str, pd.DataFrame]] = {}
+
+    for value in config["snapshots"]:
+        snapshot = str(value)
+        folder = raw_root / snapshot
+        paths = {table: folder / f"{table}.csv.gz" for table in TABLES}
+        for table, path in paths.items():
+            _check_csv_file(path, table)
+
+        listings = _read_matching_rows(paths["listings"], "id", listing_ids)
+        listings["analysis_area"] = listings["id"].str.strip().map(area_by_listing)
+        calendar = _read_matching_rows(paths["calendar"], "listing_id", listing_ids)
+        reviews = _read_matching_rows(paths["reviews"], "id", review_ids)
+        reviews = reviews.join(flags, on="id")
+        for frame in (listings, calendar, reviews):
+            frame.insert(0, "snapshot", snapshot)
+        filtered[snapshot] = {"listings": listings, "calendar": calendar, "reviews": reviews}
+        LOGGER.info("%s: listings=%d calendar=%d reviews=%d", snapshot, len(listings), len(calendar), len(reviews))
+    return filtered
+
+
+def concat_snapshots(
+    filtered_dict: Mapping[str, Mapping[str, pd.DataFrame]],
+) -> dict[str, pd.DataFrame]:
+    if not filtered_dict:
+        raise ValueError("Không có snapshot để nối.")
+    return {
+        table: pd.concat(
+            [filtered_dict[snapshot][table] for snapshot in filtered_dict],
+            ignore_index=True,
+        )
+        for table in TABLES
+    }
+
+
+def save_filtered(combined: Mapping[str, pd.DataFrame], config: Mapping[str, Any]) -> dict[str, Path]:
+    processed = _path(config, config["paths"]["processed"])
+    processed.mkdir(parents=True, exist_ok=True)
+    out = {}
+    for table, frame in combined.items():
+        path = processed / f"filtered_{table}.csv.gz"
+        frame.to_csv(path, index=False, compression="gzip")
+        out[table] = path
+        LOGGER.info("Lưu %s (%d dòng)", path, len(frame))
+    return out
+
+
+def _missing_price_count(series: pd.Series) -> int:
+    text = series.astype("string").str.strip().str.lower()
+    return int((series.isna() | text.isin({"", "nan", "none", "null", "na", "n/a"})).sum())
+
+
+def validate_quotas(
+    filtered_dict: Mapping[str, Mapping[str, pd.DataFrame]],
+    config: Mapping[str, Any],
+) -> bool:
+    quota = config["quota"]
+    qa = config["qa"]
+    snapshots = [str(value) for value in config["snapshots"]]
+    enforce = {str(s) for s in quota.get("enforce_for", snapshots)}
+    no_review_counts = {str(k): int(v) for k, v in quota.get("no_review_counts", {}).items()}
+    missing_price_counts = {str(k): int(v) for k, v in quota.get("missing_price_counts", {}).items()}
+
     errors: list[str] = []
-    snapshots = [str(s) for s in config["snapshots"]]
-    expected_no_reviews = {"2025-09-12": 50, "2025-12-12": 30, "2026-03-21": 25, "2026-06-16": 25}
-    for snap in snapshots:
-        df_l = data_dict["listings"].loc[data_dict["listings"]["snapshot"] == snap]
-        df_c = data_dict["calendar"].loc[data_dict["calendar"]["snapshot"] == snap]
-        df_r = data_dict["reviews"].loc[data_dict["reviews"]["snapshot"] == snap]
-        if len(df_l) != 1000:
-            errors.append(f"{snap}: listings cần 1000 dòng, thực tế {len(df_l)}")
-        if len(df_c) != 365000:
-            errors.append(f"{snap}: calendar cần 365000 dòng, thực tế {len(df_c)}")
-        if len(df_r) != 5000:
-            errors.append(f"{snap}: reviews cần 5000 dòng, thực tế {len(df_r)}")
-        room_counts = df_l["room_type"].value_counts()
-        if room_counts.get("Entire home/apt", 0) != 875 or room_counts.get("Private room", 0) != 125:
-            errors.append(f"{snap}: sai tỷ lệ loại phòng 875/125.")
-        no_rev = int((pd.to_numeric(df_l["number_of_reviews"], errors="coerce") == 0).sum())
-        if snap in expected_no_reviews and no_rev != expected_no_reviews[snap]:
-            errors.append(f"{snap}: số phòng 0 review cần {expected_no_reviews[snap]}, có {no_rev}")
-        if snap == snapshots[-1]:
-            missing_price = int(df_l["price"].isna().sum())
-            if missing_price != 20:
-                errors.append(f"{snap}: thiếu giá ở mốc cuối cần 20, thực tế {missing_price}")
-        area_counts = df_l["analysis_area"].value_counts()
-        if not ((area_counts >= 120) & (area_counts <= 130)).all():
-            errors.append(f"{snap}: số listing mỗi vùng analysis_area nằm ngoài khoảng 120-130.")
+    warnings: list[str] = []
+    expected_rows = {
+        "listings": int(quota["listings_per_snapshot"]),
+        "calendar": int(quota["calendar_rows_per_snapshot"]),
+        "reviews": int(quota["reviews_per_snapshot"]),
+    }
+    for snapshot in snapshots:
+        if snapshot not in filtered_dict:
+            errors.append(f"Thiếu snapshot {snapshot}.")
+            continue
+        report = errors if snapshot in enforce else warnings
+        frames = filtered_dict[snapshot]
+        listings = frames["listings"]
+        for table, expected in expected_rows.items():
+            actual = len(frames[table])
+            if actual != expected:
+                report.append(f"{snapshot}: {table} cần {expected} dòng, có {actual}")
+
+        if "room_type" in listings:
+            counts = listings["room_type"].value_counts()
+            for room_type, expected in quota["room_type_counts"].items():
+                actual = int(counts.get(room_type, 0))
+                if actual != int(expected):
+                    report.append(f"{snapshot}: {room_type} cần {expected}, có {actual}")
+        else:
+            errors.append(f"{snapshot}: thiếu cột room_type.")
+
+        if "number_of_reviews" not in listings:
+            errors.append(f"{snapshot}: thiếu cột number_of_reviews.")
+        elif snapshot in no_review_counts:
+            no_review = int((pd.to_numeric(listings["number_of_reviews"], errors="coerce") == 0).sum())
+            if no_review != no_review_counts[snapshot]:
+                report.append(f"{snapshot}: no_review cần {no_review_counts[snapshot]}, có {no_review}")
+        else:
+            warnings.append(f"{snapshot}: không có quota no_review cho mốc này, bỏ qua.")
+
+        price_column = qa.get("price_column", "price")
+        if price_column not in listings:
+            errors.append(f"{snapshot}: thiếu cột {price_column}.")
+        elif snapshot in missing_price_counts:
+            missing_price = _missing_price_count(listings[price_column])
+            if missing_price != missing_price_counts[snapshot]:
+                report.append(f"{snapshot}: missing_price cần {missing_price_counts[snapshot]}, có {missing_price}")
+
+        area_column = "analysis_area" if "analysis_area" in listings else qa.get("area_column", "neighbourhood_cleansed")
+        area_quota = quota.get("neighbourhood_listings")
+        if area_quota:
+            counts = listings[area_column].fillna("<missing>").value_counts()
+            lower, upper = int(area_quota["min"]), int(area_quota["max"])
+            for area, count in counts.items():
+                if not lower <= int(count) <= upper:
+                    report.append(f"{snapshot}: {area_column}={area} có {count} listings, ngoài khoảng {lower}-{upper}")
+
+    for w in warnings:
+        LOGGER.warning("Quota (mốc ngoài danh sách bắt buộc): %s", w)
     if errors:
-        raise ValueError("Kiểm tra Quota thất bại:\n" + "\n".join(errors))
+        raise ValueError("Kiểm tra quota thất bại:\n- " + "\n- ".join(errors))
+    LOGGER.info("Quota OK cho %d mốc (bắt buộc: %s)", len(snapshots), ", ".join(sorted(enforce & set(snapshots))))
     return True
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Tải và lọc dữ liệu Inside Airbnb.")
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--download-only", action="store_true")
+    args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    config = load_config(args.config)
+    download_raw_snapshots(config)
+    if not args.download_only:
+        filtered = filter_assigned_data(config)
+        validate_quotas(filtered, config)
+        combined = concat_snapshots(filtered)
+        save_filtered(combined, config)
+        for table, frame in combined.items():
+            LOGGER.info("%s: %d dòng qua %d snapshot", table, len(frame), len(filtered))
+
+
+if __name__ == "__main__":
+    main()

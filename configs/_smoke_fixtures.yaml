@@ -1,0 +1,74 @@
+
+city: melbourne
+data_code: DSE2049-C04-G02-melbourne-SMOKE
+data_root: australia/vic/melbourne
+currency: AUD
+snapshots: ["2025-09-12", "2025-12-12", "2026-03-21", "2026-06-16"]
+
+source:
+  base_url: https://data.insideairbnb.com
+  license: "CC BY 4.0 — Inside Airbnb (https://insideairbnb.com/get-the-data/)"
+
+paths:
+  raw: data/samples/fixtures
+  processed: data/samples/fixtures/_out/processed
+  samples: data/samples/fixtures
+  figures: data/samples/fixtures/_out/figures
+  reports: data/samples/fixtures/_out/reports
+
+assignments:
+  listings: data/samples/fixtures/assigned_listings.csv
+  reviews: data/samples/fixtures/assigned_reviews.csv
+  areas: data/samples/fixtures/analysis_areas.csv
+
+quota:
+  enforce_for: ["2025-09-12", "2025-12-12", "2026-03-21", "2026-06-16"]
+  listings_per_snapshot: 40
+  calendar_rows_per_snapshot: 14600
+  reviews_per_snapshot: 200
+  room_type_counts:
+    "Entire home/apt": 35
+    "Private room": 5
+  no_review_counts:
+    "2025-09-12": 2
+    "2025-12-12": 1
+    "2026-03-21": 1
+    "2026-06-16": 1
+  missing_price_counts:
+    "2026-06-16": 1
+  neighbourhood_listings: {min: 5, max: 5}
+
+qa:
+  price_column: price
+  price_snapshot: last
+  price_min: 10
+  price_max: 5000
+  min_nights_cap: 365
+  accommodates_max: 16
+  known_room_types: ["Entire home/apt", "Private room", "Shared room", "Hotel room"]
+  review_min_chars: 3
+  dedupe_keys_listings: [snapshot, id]
+  dedupe_keys_calendar: [snapshot, listing_id, date]
+  dedupe_keys_reviews: [snapshot, id]
+
+kpi:
+  area_col: analysis_area
+  short_stay_max_nights: 7
+  occupancy_window_days: 90
+  multi_host_threshold: 2
+
+llm:
+  provider: mock
+  model: mock-baseline
+  api_key_env: GEMINI_API_KEY
+  batch_size: 20
+  max_retries: 2
+  temperature: 0.0
+  aspects: [location, cleanliness, host, value, amenities, noise, safety]
+  cache: data/samples/fixtures/_out/processed/llm_cache.jsonl
+  results: data/samples/fixtures/_out/processed/llm_results.csv
+  prices_usd_per_1m:
+    gemini-2.5-flash:      {input: 0.30, output: 2.50}
+    gemini-2.5-flash-lite: {input: 0.10, output: 0.40}
+
+seed: 42
